@@ -1,0 +1,56 @@
+
+name: CI/CD Pipeline
+on:
+  push:
+    branches: [main, feature/*]
+  pull_request:
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    env:
+      DATA_PATH: ${{ secrets.DATA_PATH }}
+      MODEL_NAME: ${{ secrets.MODEL_NAME }}
+      AZURE_REGION: ${{ secrets.AZURE_REGION }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: flake8 src/ tests/
+
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files
+
+      - name: Run unit tests
+        run: pytest tests/
+
+      - name: Azure ML login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: true
+
+      - name: Deploy model to Azure ML
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          AZURE_WORKSPACE_NAME: ${{ secrets.AZURE_WORKSPACE_NAME }}
+        run: |
+          python src/register_model.py
+          python src/deploy_model.py
